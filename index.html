@@ -353,6 +353,48 @@
     }
     .reset-btn:hover { border-color: var(--border-hover); color: var(--text); }
 
+    /* BONUS CARD */
+    .bonus-card {
+      background: var(--card);
+      border: 1px solid var(--accent-border);
+      border-radius: 14px;
+      padding: 16px 18px 14px;
+      margin-bottom: 1.5rem;
+      animation: fadeUp 0.5s 0.38s ease both;
+    }
+
+    .bonus-pip {
+      flex: 1;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--surface);
+      transition: background 0.15s;
+    }
+    .bonus-pip.on { background: var(--green); }
+
+    .bonus-score-num {
+      font-size: 22px;
+      font-weight: 700;
+      font-family: 'Cinzel', serif;
+      min-width: 24px;
+      text-align: right;
+      color: var(--green);
+    }
+
+    .result-bonus-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 0.6rem;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .result-bonus-line .bonus-val {
+      color: var(--green);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(12px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -365,7 +407,7 @@
   <header class="site-header">
     <p class="eyebrow">Évaluation</p>
     <h1>Notation<br>Manga & Anime</h1>
-    <p class="subtitle">Six critères pondérés · Score sur 100</p>
+    <p class="subtitle">Six critères pondérés · Bonus · Score sur 100</p>
   </header>
 
   <div class="type-toggle">
@@ -380,6 +422,25 @@
 
   <div class="criteria-grid" id="criteria-grid"></div>
 
+  <!-- BONUS -->
+  <div class="bonus-card">
+    <div class="crit-top">
+      <span class="crit-name">⭐ Bonus</span>
+      <span class="coeff-badge x2">+ 0 à 5 pts</span>
+    </div>
+    <div class="slider-row">
+      <input type="range" min="0" max="5" step="1" value="0" id="slider-bonus" oninput="onBonus(this.value)" />
+      <span class="bonus-score-num" id="badge-bonus">0</span>
+    </div>
+    <div class="pip-row" id="pips-bonus">
+      <div class="bonus-pip"></div>
+      <div class="bonus-pip"></div>
+      <div class="bonus-pip"></div>
+      <div class="bonus-pip"></div>
+      <div class="bonus-pip"></div>
+    </div>
+  </div>
+
   <div class="result-card">
     <div class="result-main">
       <span class="big-score" id="big-score">0</span>
@@ -388,6 +449,12 @@
     </div>
     <div class="progress-bar-wrap">
       <div class="progress-bar-fill" id="prog-fill"></div>
+    </div>
+    <div class="result-bonus-line">
+      <span>Score de base :</span>
+      <span id="base-score-display" style="font-weight:700;color:var(--text)">0</span>
+      <span style="margin-left:4px">+ Bonus :</span>
+      <span class="bonus-val" id="bonus-display">+0</span>
     </div>
     <div class="breakdown" id="breakdown"></div>
     <p class="formula-note" id="formula-note">Entrez vos notes pour obtenir le score final.</p>
@@ -399,6 +466,7 @@
 <script>
   let currentType = 'manga';
   const scores = {};
+  let bonus = 0;
 
   const CRITERIA = {
     manga: [
@@ -419,20 +487,29 @@
     ]
   };
 
-  function pipClass(val) {
-    if (val >= 9) return 'great';
-    if (val >= 7) return 'high';
-    if (val >= 4) return 'mid';
+  function pipClass(val, max) {
+    const ratio = val / max;
+    if (ratio >= 0.85) return 'great';
+    if (ratio >= 0.65) return 'high';
+    if (ratio >= 0.35) return 'mid';
     return 'low';
   }
 
-  function renderPips(val) {
+  function renderPips(val, max) {
     let h = '';
-    const cls = pipClass(val);
-    for (let i = 1; i <= 10; i++) {
+    const cls = pipClass(val, max);
+    for (let i = 1; i <= max; i++) {
       h += `<div class="pip${i <= val ? ' ' + cls : ''}"></div>`;
     }
     return h;
+  }
+
+  function onBonus(val) {
+    bonus = parseInt(val);
+    document.getElementById('badge-bonus').textContent = val;
+    const pips = document.querySelectorAll('#pips-bonus .bonus-pip');
+    pips.forEach((p, i) => { p.classList.toggle('on', i < bonus); });
+    updateResult();
   }
 
   function setType(type) {
@@ -458,11 +535,11 @@
           <span class="coeff-badge${c.coeff === 2 ? ' x2' : ''}">× ${c.coeff}</span>
         </div>
         <div class="slider-row">
-          <input type="range" min="0" max="10" step="1" value="${val}" id="slider-${c.id}"
+          <input type="range" min="0" max="20" step="1" value="${val}" id="slider-${c.id}"
             oninput="onSlide('${c.id}', this.value)" />
           <span class="score-num" id="badge-${c.id}">${val}</span>
         </div>
-        <div class="pip-row" id="pips-${c.id}">${renderPips(val)}</div>
+        <div class="pip-row" id="pips-${c.id}">${renderPips(val, 20)}</div>
       `;
       grid.appendChild(card);
     });
@@ -471,7 +548,7 @@
   function onSlide(id, val) {
     scores[id] = parseInt(val);
     document.getElementById('badge-' + id).textContent = val;
-    document.getElementById('pips-' + id).innerHTML = renderPips(parseInt(val));
+    document.getElementById('pips-' + id).innerHTML = renderPips(parseInt(val), 20);
     updateResult();
   }
 
@@ -482,26 +559,29 @@
       weighted += (scores[c.id] || 0) * c.coeff;
       totalCoeff += c.coeff;
     });
-    const maxW = 10 * totalCoeff;
-    const score = Math.round((weighted / maxW) * 100);
+    const maxW = 20 * totalCoeff;
+    const baseScore = Math.round((weighted / maxW) * 100);
+    const finalScore = Math.min(100, baseScore + bonus);
 
-    document.getElementById('big-score').textContent = score;
+    document.getElementById('big-score').textContent = finalScore;
+    document.getElementById('base-score-display').textContent = baseScore;
+    document.getElementById('bonus-display').textContent = '+' + bonus;
 
     const fill = document.getElementById('prog-fill');
-    fill.style.width = score + '%';
+    fill.style.width = finalScore + '%';
 
     let verdict = '—', vStyle = '', fillColor = 'var(--accent)';
-    if (weighted === 0) {
+    if (weighted === 0 && bonus === 0) {
       verdict = '—'; vStyle = '';
-    } else if (score >= 90) {
+    } else if (finalScore >= 90) {
       verdict = 'Chef-d\'œuvre'; vStyle = 'background:var(--green-dim);color:var(--green);border-color:rgba(92,184,138,0.3)'; fillColor = 'var(--green)';
-    } else if (score >= 75) {
+    } else if (finalScore >= 75) {
       verdict = 'Excellent'; vStyle = 'background:var(--green-dim);color:var(--green);border-color:rgba(92,184,138,0.3)'; fillColor = 'var(--green)';
-    } else if (score >= 60) {
+    } else if (finalScore >= 60) {
       verdict = 'Très bien'; vStyle = 'background:var(--blue-dim);color:var(--blue);border-color:rgba(106,170,232,0.3)'; fillColor = 'var(--blue)';
-    } else if (score >= 45) {
+    } else if (finalScore >= 45) {
       verdict = 'Correct'; vStyle = 'background:var(--accent-dim);color:var(--accent);border-color:var(--accent-border)'; fillColor = 'var(--accent)';
-    } else if (score >= 25) {
+    } else if (finalScore >= 25) {
       verdict = 'Décevant'; vStyle = 'background:var(--orange-dim);color:var(--orange);border-color:rgba(224,147,92,0.3)'; fillColor = 'var(--orange)';
     } else {
       verdict = 'À éviter'; vStyle = 'background:var(--red-dim);color:var(--red);border-color:rgba(224,92,92,0.3)'; fillColor = 'var(--red)';
@@ -514,18 +594,21 @@
 
     document.getElementById('breakdown').innerHTML = criteria.map(c => {
       const pts = (scores[c.id] || 0) * c.coeff;
-      const max = 10 * c.coeff;
+      const max = 20 * c.coeff;
       return `<div class="bk-item">${c.label}<strong>${pts} / ${max} pts</strong></div>`;
     }).join('');
 
     const coeffInfo = criteria.filter(c => c.coeff > 1).map(c => `${c.label} (×${c.coeff})`).join(', ');
     document.getElementById('formula-note').textContent =
-      `Score = (somme pondérée / ${maxW}) × 100 · Coefficient double : ${coeffInfo}`;
+      `Score = (somme pondérée / ${maxW}) × 100 + bonus (0–5) · Coefficient double : ${coeffInfo}`;
   }
 
   function resetAll() {
     Object.keys(scores).forEach(k => scores[k] = 0);
+    bonus = 0;
     document.getElementById('title-input').value = '';
+    document.getElementById('slider-bonus').value = 0;
+    onBonus(0);
     renderCriteria();
     updateResult();
   }
